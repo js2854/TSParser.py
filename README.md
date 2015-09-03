@@ -3,7 +3,7 @@ Python实现的一个解析MPEG-TS的小程序，解析PAT,PMT,PCR,PTS,DTS等信
 
 ## Usage
 
-	Usage: TSParser0.py filepath [Options]
+	Usage: TSParser.py filepath [Options]
 
 	  filepath              the mpeg-ts file
 
