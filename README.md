@@ -3,17 +3,14 @@ Python实现的一个解析MPEG-TS的小程序，解析PAT,PMT,PCR,PTS,DTS等信
 
 ## Usage
 
-Need `python 2.7` or later, beacause `argparse` required
+	Usage: TSParser0.py filepath [Options]
 
-	usage: TSParser.py [-h] [-p PID] [-g GREP] filepath
+	  filepath              the mpeg-ts file
 
-	positional arguments:
-	  filepath              The mpeg-ts file
-
-	optional arguments:
+	Options:
 	  -h, --help            show this help message and exit
-	  -p PID, --pid PID     Only show the specific pid
-	  -g GREP, --grep GREP  Show the specific package type, default is
+	  -p PID, --pid=PID     only show the specific pid
+	  -g GREP, --grep=GREP  show the specific package type, default is
 	                        "PAT,PMT,PCR,PTS,DTS"
 
 ## Demo

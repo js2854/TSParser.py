@@ -23,7 +23,7 @@ ES_TYPE_MPEG1A, ES_TYPE_MPEG2A, ES_TYPE_AAC, ES_TYPE_AC3, ES_TYPE_DTS = 0x03, 0x
 import sys
 import ctypes
 import os
-import argparse
+from optparse import OptionParser
 
 sizeof = ctypes.sizeof
 
@@ -375,11 +375,13 @@ class TSParser:
         self.fd = None
         self.pkt_no = 0
         self.show_pid = PID_UNSPEC
-        self.grep = ''
+        self.grep = 'PAT,PMT,PCR,PTS,DTS'
 
     def set_show_param(self, pid, grep):
-        self.show_pid = pid
-        self.grep = grep
+        if pid is not None:
+            self.show_pid = pid
+        if grep:
+            self.grep = grep
 
     def parse(self):
         self.__open_file()
@@ -479,23 +481,23 @@ class TSParser:
         print ''
 
 
-def auto_int(x):
-    '''使pid参数兼容10进制和16进制,使用默认的type=int不支持16进制数'''
-    return int(x, 0)
-
-
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('filepath', help='The mpeg-ts file')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('-p', '--pid', type=auto_int, default=PID_UNSPEC, help='Only show the specific pid')
-    group.add_argument('-g', '--grep', default='PAT,PMT,PCR,PTS,DTS',
-                        help='Show the specific package type, default is "PAT,PMT,PCR,PTS,DTS"')
-    args = parser.parse_args()
+    usage = 'Usage: %prog filepath [Options]\n\n'
+    usage += '  filepath              the mpeg-ts file'
+    parser = OptionParser(usage=usage)
+    parser.add_option('-p', '--pid', type='int', help='only show the specific pid')
+    parser.add_option('-g', '--grep', help='show the specific package type, default is "PAT,PMT,PCR,PTS,DTS"')
+    opts, args = parser.parse_args()
+    if len(args) < 1:
+        parser.print_help()
+        exit(0)
+    if opts.pid is not None and opts.grep:
+        parser.error('options -p/--pid and -g/--grep are mutually exclusive')
+        exit(0)
 
     try:
-        ts_parser = TSParser(args.filepath)
-        ts_parser.set_show_param(args.pid, args.grep)
+        ts_parser = TSParser(args[0])
+        ts_parser.set_show_param(opts.pid, opts.grep)
         ts_parser.parse()
     except KeyboardInterrupt:
         print '\n^C received, Exit.'
