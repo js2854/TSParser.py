@@ -381,7 +381,7 @@ class TSParser:
         self.fd = None
         self.pkt_no = 0
         self.show_pid = PID_UNSPEC
-        self.grep = 'PAT,PMT,PCR,PTS,DTS'
+        self.grep = 'ALL'
 
     def set_show_param(self, pid, grep):
         if pid is not None:
@@ -452,19 +452,15 @@ class TSParser:
 
     def __is_show_pkt(self, pkt):
         show = True
-        if PID_UNSPEC != self.show_pid and pkt.pid != self.show_pid:
-            show = False
-        if pkt.is_pat() and 'PAT' not in self.grep:
-            show = False
-        if pkt.is_pmt() and 'PMT' not in self.grep:
-            show = False
-        if pkt.pcr > 0 and 'PCR' not in self.grep:
-            show = False
-        if pkt.pts > 0 and 'PTS' not in self.grep:
-            show = False
-        if pkt.dts > 0 and 'DTS' not in self.grep:
-            show = False
-        return show        
+        if PID_UNSPEC != self.show_pid:
+            show = pkt.pid == self.show_pid
+        elif 'ALL' != self.grep:
+            show = pkt.is_pat() and 'PAT' in self.grep
+            show = show or pkt.is_pmt() and 'PMT' in self.grep
+            show = show or pkt.pcr > 0 and 'PCR' in self.grep
+            show = show or pkt.pts > 0 and 'PTS' in self.grep
+            show = show or pkt.dts > 0 and 'DTS' in self.grep
+        return show
 
     def __print_packet_info(self, pkt, offset):            
         args = (self.pkt_no, offset, pkt.pid, pkt.cc)
@@ -497,7 +493,7 @@ def main():
     usage += '  filepath              the mpeg-ts file'
     parser = OptionParser(usage=usage)
     parser.add_option('-p', '--pid', type='int', help='only show the specific pid')
-    parser.add_option('-g', '--grep', help='show the specific package type, default is "PAT,PMT,PCR,PTS,DTS"')
+    parser.add_option('-g', '--grep', help='show the specific package type, such as "PAT,PMT,PCR,PTS,DTS"')
     opts, args = parser.parse_args()
     if len(args) < 1:
         parser.print_help()
