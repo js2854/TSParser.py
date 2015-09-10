@@ -217,10 +217,12 @@ class TSPacket:
 
     def parse(self):
         if not self.buf or (TS_PKT_LEN != len(self.buf)):
-            print '###### Input data length is not 188 bytes!'
+            print '###### Input data length is not 188 bytes!',len(self.buf),self.buf
+            return False
 
         if TS_SYNC_BYTE != ord(self.buf[0]):
             print '###### The first byte of packet is not 0x47!'
+            return False
 
         self.ts_header = TSHdrFixedPart.from_buffer_copy(self.buf[0:sizeof(TSHdrFixedPart)])
         self.pid = mk_word(self.ts_header.pid12_8, self.ts_header.pid7_0)
@@ -235,6 +237,8 @@ class TSPacket:
 
         if self.__has_payload():
             self.__parse_pes()
+
+        return True
 
     def is_pat(self):
         return PID_PAT == self.pid
@@ -361,6 +365,8 @@ class TSPacket:
     def __parse_pes(self):
         pes_pos = self.__get_payload_offset()
         option_hdr_pos = pes_pos + sizeof(PESHdrFixedPart)
+        if option_hdr_pos > TS_PKT_LEN:
+            return 
         pes = PESHdrFixedPart.from_buffer_copy(self.buf[pes_pos:option_hdr_pos])
         if PES_START_CODE == pes.packet_start_code_prefix:
             self.stream_id = pes.stream_id
@@ -398,10 +404,11 @@ class TSParser:
                 buf = self.fd.read(read_len)
                 if not buf:
                     break
-                for i in xrange(0, read_len, TS_PKT_LEN):
+                real_len = len(buf)
+                for i in xrange(0, real_len, TS_PKT_LEN):
                     pkt = TSPacket(buf[i:i+TS_PKT_LEN])
-                    pkt.parse()
-                    if self.__is_show_pkt(pkt):
+                    success = pkt.parse()
+                    if success and self.__is_show_pkt(pkt):
                         self.__print_packet_info(pkt, cur_pos)
                     cur_pos += TS_PKT_LEN
                     self.pkt_no += 1
@@ -445,14 +452,18 @@ class TSParser:
 
     def __is_show_pkt(self, pkt):
         show = True
-        if PID_UNSPEC != self.show_pid:
-            show = pkt.pid == self.show_pid
-        else:
-            show = pkt.is_pat() and 'PAT' in self.grep
-            show = show or pkt.is_pmt() and 'PMT' in self.grep
-            show = show or pkt.pcr > 0 and 'PCR' in self.grep
-            show = show or pkt.pts > 0 and 'PTS' in self.grep
-            show = show or pkt.dts > 0 and 'DTS' in self.grep
+        if PID_UNSPEC != self.show_pid and pkt.pid != self.show_pid:
+            show = False
+        if pkt.is_pat() and 'PAT' not in self.grep:
+            show = False
+        if pkt.is_pmt() and 'PMT' not in self.grep:
+            show = False
+        if pkt.pcr > 0 and 'PCR' not in self.grep:
+            show = False
+        if pkt.pts > 0 and 'PTS' not in self.grep:
+            show = False
+        if pkt.dts > 0 and 'DTS' not in self.grep:
+            show = False
         return show        
 
     def __print_packet_info(self, pkt, offset):            
