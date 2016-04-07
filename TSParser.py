@@ -275,7 +275,7 @@ class TSPacket:
     def __get_pcr(self):
         pcr_val = INVALID_VAL
         adapt = self.__get_adapt_field()
-        if adapt and adapt.PCR_flag:
+        if adapt and adapt.adaptation_field_length > 0 and adapt.PCR_flag:
             pcr = PCR.from_buffer_copy(self.buf[sizeof(TSHdrFixedPart) + sizeof(AdaptFixedPart):])
             pcr_val = timestamp(pcr.base32_25, pcr.base24_17, pcr.base16_9, pcr.base8_1, pcr.base0)
         return pcr_val
