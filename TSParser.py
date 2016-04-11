@@ -23,6 +23,7 @@ ES_TYPE_MPEG1A, ES_TYPE_MPEG2A, ES_TYPE_AAC, ES_TYPE_AC3, ES_TYPE_DTS = 0x03, 0x
 import sys
 import ctypes
 import os
+from datetime import timedelta
 from optparse import OptionParser
 
 sizeof = ctypes.sizeof
@@ -41,6 +42,10 @@ def mk_word(high_bits, low_bits):
 
 def timestamp(bits1, bits2, bits3, bits4, bits5):
     return bits1 << 25 | bits2 << 17 | bits3 << 9 | bits4 << 1 | bits5
+
+
+def ts2second(timestamp):
+    return timestamp/90000.0
 
 
 class TSHdrFixedPart(ctypes.LittleEndianStructure):
@@ -340,7 +345,7 @@ class TSPacket:
         pmt_pos = self.__get_table_start_pos()
         section_pos = pmt_pos + sizeof(PMTHdrFixedPart)
         pmt = PMTHdrFixedPart.from_buffer_copy(self.buf[pmt_pos:section_pos])
-        
+
         TSPacket.pid_map['PCR'] = mk_word(pmt.PCR_PID12_8, pmt.PCR_PID7_0)
         section_len = mk_word(pmt.section_length11_8, pmt.section_length7_0)
         # n * program_info_descriptor的长度
@@ -366,7 +371,7 @@ class TSPacket:
         pes_pos = self.__get_payload_offset()
         option_hdr_pos = pes_pos + sizeof(PESHdrFixedPart)
         if option_hdr_pos > TS_PKT_LEN:
-            return 
+            return
         pes = PESHdrFixedPart.from_buffer_copy(self.buf[pes_pos:option_hdr_pos])
         if PES_START_CODE == pes.packet_start_code_prefix:
             self.stream_id = pes.stream_id
@@ -399,7 +404,7 @@ class TSParser:
         print 'Seek to first packet, offset: 0x%08X' % cur_pos
 
         read_len = MAX_READ_PKT_NUM*TS_PKT_LEN
-        try:            
+        try:
             while True:
                 buf = self.fd.read(read_len)
                 if not buf:
@@ -408,6 +413,8 @@ class TSParser:
                 for i in xrange(0, real_len, TS_PKT_LEN):
                     pkt = TSPacket(buf[i:i+TS_PKT_LEN])
                     success = pkt.parse()
+                    if not success:
+                        print '###### Sync byte error! cur_pos<%d>, pkt_no<%d>' % (cur_pos, self.pkt_no+1)
                     if success and self.__is_show_pkt(pkt):
                         self.__print_packet_info(pkt, cur_pos)
                     cur_pos += TS_PKT_LEN
@@ -433,7 +440,7 @@ class TSParser:
             self.fd = None
             print 'Close file<%s>' % self.file_path
 
-    def __seek_to_first_pkt(self):        
+    def __seek_to_first_pkt(self):
         try:
             buf = self.fd.read(MAX_READ_PKT_NUM * TS_PKT_LEN)
             loop_num = len(buf) - MAX_CHECK_PKT_NUM * TS_PKT_LEN
@@ -462,7 +469,7 @@ class TSParser:
             show = show or pkt.dts > 0 and 'DTS' in self.grep
         return show
 
-    def __print_packet_info(self, pkt, offset):            
+    def __print_packet_info(self, pkt, offset):
         args = (self.pkt_no, offset, pkt.pid, pkt.cc)
         print 'PktNo: %08u, Offset: 0x%08X, PID: 0x%04X, CC: %02u' % args,
 
@@ -471,14 +478,14 @@ class TSParser:
         elif pkt.is_pmt():
             print ', PMT',
         elif pkt.pcr > 0:
-            print ', PCR: %d' % pkt.pcr,
+            print ', PCR: %d(%s)' % (pkt.pcr, timedelta(seconds=ts2second(pkt.pcr))),
         elif PID_NULL == pkt.pid:
             print ', Null Packet',
 
         if pkt.pts > 0:
-            print ', PTS: %d' % pkt.pts,
+            print ', PTS: %d(%s)' % (pkt.pts, timedelta(seconds=ts2second(pkt.pts))),
         if pkt.dts > 0:
-            print ', DTS: %d' % pkt.dts,
+            print ', DTS: %d(%s)' % (pkt.dts, timedelta(seconds=ts2second(pkt.dts))),
 
         if pkt.is_video():
             print ', Video',
@@ -508,7 +515,7 @@ def main():
         ts_parser.parse()
     except KeyboardInterrupt:
         print '\n^C received, Exit.'
-    
+
 if __name__ == '__main__':
     main()
     exit(0)
