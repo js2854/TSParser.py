@@ -40,8 +40,12 @@ def mk_word(high_bits, low_bits):
     return (high_bits << 8) | low_bits
 
 
-def timestamp(bits1, bits2, bits3, bits4, bits5):
+def mk_pcr(bits1, bits2, bits3, bits4, bits5):
     return bits1 << 25 | bits2 << 17 | bits3 << 9 | bits4 << 1 | bits5
+
+
+def mk_pts_dts(bits1, bits2, bits3, bits4, bits5):
+    return bits1 << 30 | bits2 << 22 | bits3 << 15 | bits4 << 7 | bits5
 
 
 def ts2second(timestamp):
@@ -282,7 +286,7 @@ class TSPacket:
         adapt = self.__get_adapt_field()
         if adapt and adapt.adaptation_field_length > 0 and adapt.PCR_flag:
             pcr = PCR.from_buffer_copy(self.buf[sizeof(TSHdrFixedPart) + sizeof(AdaptFixedPart):])
-            pcr_val = timestamp(pcr.base32_25, pcr.base24_17, pcr.base16_9, pcr.base8_1, pcr.base0)
+            pcr_val = mk_pcr(pcr.base32_25, pcr.base24_17, pcr.base16_9, pcr.base8_1, pcr.base0)
         return pcr_val
 
     def __is_video_stream(self, stream_type):
@@ -309,16 +313,17 @@ class TSPacket:
         option_hdr = OptionPESHdrFixedPart.from_buffer_copy(self.buf[option_hdr_pos:pts_pos])
         if option_hdr.PTS_DTS_flags & 0x2:
             pts = PTS_DTS.from_buffer_copy(self.buf[pts_pos:pts_pos+sizeof(PTS_DTS)])
-            pts_val = timestamp(pts.ts32_30, pts.ts29_22, pts.ts21_15, pts.ts14_7, pts.ts6_0)
+            pts_val = mk_pts_dts(pts.ts32_30, pts.ts29_22, pts.ts21_15, pts.ts14_7, pts.ts6_0)
         return pts_val
 
     def __get_dts(self, option_hdr_pos):
         dts_val = INVALID_VAL
-        dts_pos = option_hdr_pos + sizeof(OptionPESHdrFixedPart)
-        option_hdr = OptionPESHdrFixedPart.from_buffer_copy(self.buf[option_hdr_pos:dts_pos])
+        pts_pos = option_hdr_pos + sizeof(OptionPESHdrFixedPart)
+        option_hdr = OptionPESHdrFixedPart.from_buffer_copy(self.buf[option_hdr_pos:pts_pos])
         if option_hdr.PTS_DTS_flags & 0x1:
+            dts_pos = pts_pos + sizeof(PTS_DTS)
             dts = PTS_DTS.from_buffer_copy(self.buf[dts_pos:dts_pos+sizeof(PTS_DTS)])
-            dts_val = timestamp(dts.ts32_30, dts.ts29_22, dts.ts21_15, dts.ts14_7, dts.ts6_0)
+            dts_val = mk_pts_dts(dts.ts32_30, dts.ts29_22, dts.ts21_15, dts.ts14_7, dts.ts6_0)
         return dts_val
 
     def __parse_pat(self):
@@ -477,14 +482,14 @@ class TSParser:
             print ', PAT',
         elif pkt.is_pmt():
             print ', PMT',
-        elif pkt.pcr > 0:
+        elif pkt.pcr >= 0:
             print ', PCR: %d(%s)' % (pkt.pcr, timedelta(seconds=ts2second(pkt.pcr))),
         elif PID_NULL == pkt.pid:
             print ', Null Packet',
 
-        if pkt.pts > 0:
+        if pkt.pts >= 0:
             print ', PTS: %d(%s)' % (pkt.pts, timedelta(seconds=ts2second(pkt.pts))),
-        if pkt.dts > 0:
+        if pkt.dts >= 0:
             print ', DTS: %d(%s)' % (pkt.dts, timedelta(seconds=ts2second(pkt.dts))),
 
         if pkt.is_video():
@@ -519,3 +524,4 @@ def main():
 if __name__ == '__main__':
     main()
     exit(0)
+
