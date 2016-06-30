@@ -8,8 +8,8 @@ PES_START_CODE = 0x010000  # PES分组起始标志0x000001
 CRC32_LEN = 4
 INVALID_VAL = -1
 
-MAX_READ_PKT_NUM = 100
-MAX_CHECK_PKT_NUM = 10
+MAX_READ_PKT_NUM = 10000
+MAX_CHECK_PKT_NUM = 3
 
 # PID type
 PID_PAT, PID_NULL, PID_UNSPEC = 0x0000, 0x1fff, 0xffff
@@ -416,14 +416,21 @@ class TSParser:
                     break
                 real_len = len(buf)
                 for i in xrange(0, real_len, TS_PKT_LEN):
+                    if ord(buf[i]) != 0x47:
+                        print '###### PktNo: %08d, Offset: 0x%08X, Sync byte error!' % (self.pkt_no+1, cur_pos),
+                        print 'First byte<0x%02X>' % ord(buf[i])
+                        if not self.__seek_to_first_pkt(cur_pos):
+                            print '###### Seek to next ts packet failed!'
+                            exit(-1)
+                        cur_pos = self.fd.tell()
+                        break
+
                     pkt = TSPacket(buf[i:i+TS_PKT_LEN])
                     success = pkt.parse()
-                    if not success:
-                        print '###### Sync byte error! cur_pos<%d>, pkt_no<%d>' % (cur_pos, self.pkt_no+1)
                     if success and self.__is_show_pkt(pkt):
                         self.__print_packet_info(pkt, cur_pos)
-                    cur_pos += TS_PKT_LEN
-                    self.pkt_no += 1
+                        cur_pos += TS_PKT_LEN
+                        self.pkt_no += 1
 
             print 'Parse file complete!'
         except IOError as (errno, strerror):
@@ -445,8 +452,9 @@ class TSParser:
             self.fd = None
             print 'Close file<%s>' % self.file_path
 
-    def __seek_to_first_pkt(self):
+    def __seek_to_first_pkt(self, pos=0):
         try:
+            self.fd.seek(pos)
             buf = self.fd.read(MAX_READ_PKT_NUM * TS_PKT_LEN)
             loop_num = len(buf) - MAX_CHECK_PKT_NUM * TS_PKT_LEN
             for i in xrange(0, loop_num):
@@ -455,7 +463,7 @@ class TSParser:
                         if ord(buf[i + n * TS_PKT_LEN]) != TS_SYNC_BYTE:
                             break
                     else:
-                        self.fd.seek(i)
+                        self.fd.seek(pos+i)
                         return True
         except IOError as (errno, strerror):
             print '###### Read file error! error({0}): {1}'.format(errno, strerror)
@@ -476,29 +484,28 @@ class TSParser:
 
     def __print_packet_info(self, pkt, offset):
         args = (self.pkt_no, offset, pkt.pid, pkt.cc)
-        print 'PktNo: %08u, Offset: 0x%08X, PID: 0x%04X, CC: %02u' % args,
+        print 'PktNo: %08u, Offset: 0x%08X, PID: 0x%04X, CC: %02u,' % args,
 
         if pkt.is_pat():
-            print ', PAT',
+            print 'PAT,',
         elif pkt.is_pmt():
-            print ', PMT',
+            print 'PMT,',
         elif pkt.pcr >= 0:
-            print ', PCR: %d(%s)' % (pkt.pcr, timedelta(seconds=ts2second(pkt.pcr))),
+            print 'PCR: %d(%s),' % (pkt.pcr, timedelta(seconds=ts2second(pkt.pcr))),
         elif PID_NULL == pkt.pid:
-            print ', Null Packet',
+            print 'Null Packet,',
 
         if pkt.pts >= 0:
-            print ', PTS: %d(%s)' % (pkt.pts, timedelta(seconds=ts2second(pkt.pts))),
+            print 'PTS: %d(%s),' % (pkt.pts, timedelta(seconds=ts2second(pkt.pts))),
         if pkt.dts >= 0:
-            print ', DTS: %d(%s)' % (pkt.dts, timedelta(seconds=ts2second(pkt.dts))),
+            print 'DTS: %d(%s),' % (pkt.dts, timedelta(seconds=ts2second(pkt.dts))),
 
         if pkt.is_video():
-            print ', Video',
+            print 'Video',
         elif pkt.is_audio():
-            print ', Audio',
+            print 'Audio',
 
         print ''
-
 
 def main():
     usage = 'Usage: %prog filepath [Options]\n\n'
